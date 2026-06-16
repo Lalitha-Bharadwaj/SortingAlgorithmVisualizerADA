@@ -1,0 +1,31 @@
+# Dependency directories
+node_modules/
+dist/
+build/
+
+# Ada build artifacts
+backend/obj/
+backend/bin/
+backend/alire/
+backend/.alr/
+backend/config/backend_config.gpr
+
+# Logs
+*.log
+*.lock
+
+# Editor / OS
+.vscode/
+.idea/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+
+# TypeScript compiled output
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.production
