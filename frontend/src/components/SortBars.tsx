@@ -6,17 +6,18 @@ interface Props {
   array: number[];
   currentStep?: TraceStep;
   maxValue: number;
+  sortedIndices?: Set<number>;
 }
 
-export function SortBars({ array, currentStep, maxValue }: Props) {
+export function SortBars({ array, currentStep, maxValue, sortedIndices }: Props) {
   const getColor = (index: number): string => {
+    // Already-sorted bars always stay green
+    if (sortedIndices?.has(index)) return BAR_COLORS.sorted;
+
     if (!currentStep) return BAR_COLORS.default;
     const action = currentStep.action;
     const indices = currentStep.indices;
 
-    if (action === 'sorted') {
-      if (indices.includes(index)) return BAR_COLORS.sorted;
-    }
     if (action === 'pivot' && indices[0] === index) return BAR_COLORS.pivot;
     if ((action === 'swap' || action === 'compare') && indices.includes(index)) {
       return action === 'swap' ? BAR_COLORS.swap : BAR_COLORS.compare;

@@ -24,7 +24,17 @@ if (-not (Test-Path $backendBin)) {
     Write-Host "  Frontend will still start, but API calls will fail.`n" -ForegroundColor Gray
 } else {
     Write-Host "[Backend] Starting Ada server on port 8080..." -ForegroundColor Green
-    Start-Process -NoNewWindow -FilePath $backendBin -WorkingDirectory $backend
+    Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", "& '$backendBin'" -WorkingDirectory $backend
+
+    # Wait until backend is reachable
+    Write-Host "[Backend] Waiting for backend to be ready..." -ForegroundColor Yellow
+    $maxWait = 15; $waited = 0
+    do {
+        Start-Sleep -Seconds 1; $waited++
+        try { $null = Invoke-RestMethod -Uri "http://localhost:8080/" -TimeoutSec 1 -ErrorAction Stop; break } catch {}
+    } while ($waited -lt $maxWait)
+    if ($waited -ge $maxWait) { Write-Host "[Backend] WARNING: backend may not be ready yet." -ForegroundColor Red }
+    else { Write-Host "[Backend] Ready!" -ForegroundColor Green }
 }
 
 # ── Frontend ─────────────────────────────────────────────────────────────

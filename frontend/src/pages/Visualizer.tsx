@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -35,6 +35,27 @@ export default function Visualizer() {
   const currentStep: TraceStep | undefined = result?.trace[currentStepIndex];
   const displayArray = currentStep ? currentStep.array : array;
   const maxValue = Math.max(...displayArray, 1);
+
+  // Compute the set of indices that are permanently sorted up to the current step
+  const sortedIndices = useMemo(() => {
+    const s = new Set<number>();
+    if (!result) return s;
+    // If we've reached the last step, all bars are sorted
+    if (currentStepIndex >= result.trace.length - 1 && result.trace.length > 0) {
+      for (let i = 0; i < displayArray.length; i++) s.add(i);
+      return s;
+    }
+    for (let i = 0; i <= currentStepIndex; i++) {
+      const step = result.trace[i];
+      if (step.action === 'sorted') {
+        step.indices.forEach(idx => s.add(idx));
+      } else if (step.action === 'swap' || step.action === 'set' || step.action === 'merge') {
+        // These actions move elements — remove them from sorted if they were marked
+        step.indices.forEach(idx => s.delete(idx));
+      }
+    }
+    return s;
+  }, [result, currentStepIndex, displayArray.length]);
 
   const stopPlayback = useCallback(() => {
     if (intervalRef.current) {
@@ -220,7 +241,7 @@ export default function Visualizer() {
 
             {/* Bars */}
             <div className="bg-[rgb(var(--bg-secondary))] rounded-xl overflow-hidden">
-              <SortBars array={displayArray} currentStep={currentStep} maxValue={maxValue} />
+              <SortBars array={displayArray} currentStep={currentStep} maxValue={maxValue} sortedIndices={sortedIndices} />
             </div>
 
             {/* Progress bar */}

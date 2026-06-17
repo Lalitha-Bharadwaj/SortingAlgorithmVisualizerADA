@@ -335,7 +335,7 @@ package body API_Server is
          Response   : Unbounded_String;
          JSON_Res   : Unbounded_String;
       begin
-         Log (Method_Str & " " & Path_Str & " [Body Length: " & Content_Length'Image & "]");
+         Log (Method_Str & " " & Path_Str & " [Body Length: " & Integer'Image (Content_Length) & "]");
 
          -- 3. CORS Preflight
          if Method_Str = "OPTIONS" then
@@ -362,19 +362,31 @@ package body API_Server is
                declare
                   Input_Arr : constant Element_Vectors.Vector := Parse_Array (Req_Body);
                begin
-                  if Path_Str = "/api/sort/bubble" then
-                     JSON_Res := To_Json (Bubble_Sort.Sort (Input_Arr), "Bubble Sort");
-                  elsif Path_Str = "/api/sort/selection" then
-                     JSON_Res := To_Json (Selection_Sort.Sort (Input_Arr), "Selection Sort");
-                  elsif Path_Str = "/api/sort/insertion" then
-                     JSON_Res := To_Json (Insertion_Sort.Sort (Input_Arr), "Insertion Sort");
-                  elsif Path_Str = "/api/sort/quick" then
-                     JSON_Res := To_Json (Quick_Sort.Sort (Input_Arr), "Quick Sort");
-                  elsif Path_Str = "/api/sort/merge" then
-                     JSON_Res := To_Json (Merge_Sort.Sort (Input_Arr), "Merge Sort");
-                  elsif Path_Str = "/api/sort/heap" then
-                     JSON_Res := To_Json (Heap_Sort.Sort (Input_Arr), "Heap Sort");
-                  end if;
+                  begin
+                     if Path_Str = "/api/sort/bubble" then
+                        JSON_Res := To_Json (Bubble_Sort.Sort (Input_Arr), "Bubble Sort");
+                     elsif Path_Str = "/api/sort/selection" then
+                        JSON_Res := To_Json (Selection_Sort.Sort (Input_Arr), "Selection Sort");
+                     elsif Path_Str = "/api/sort/insertion" then
+                        JSON_Res := To_Json (Insertion_Sort.Sort (Input_Arr), "Insertion Sort");
+                     elsif Path_Str = "/api/sort/quick" then
+                        JSON_Res := To_Json (Quick_Sort.Sort (Input_Arr), "Quick Sort");
+                     elsif Path_Str = "/api/sort/merge" then
+                        JSON_Res := To_Json (Merge_Sort.Sort (Input_Arr), "Merge Sort");
+                     elsif Path_Str = "/api/sort/heap" then
+                        JSON_Res := To_Json (Heap_Sort.Sort (Input_Arr), "Heap Sort");
+                     end if;
+                  exception
+                     when Storage_Error =>
+                        JSON_Res := To_Unbounded_String ("{""error"":""Array too large: reduce size and try again""}");
+                        Response := To_Unbounded_String ("HTTP/1.1 500 Internal Server Error" & ASCII.CR & ASCII.LF &
+                           "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+                           "Content-Type: application/json" & ASCII.CR & ASCII.LF &
+                           "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
+                           "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF & To_String (JSON_Res));
+                        String'Write (Channel, To_String (Response));
+                        return;
+                  end;
                end;
 
             elsif Path_Str = "/api/topological" then
@@ -452,7 +464,7 @@ package body API_Server is
       Bind_Socket (Server, Address);
       Listen_Socket (Server);
       
-      Log ("Server listening on port" & Port'Image & "...");
+      Log ("Server listening on port" & Integer'Image (Port) & "...");
       
       loop
          begin

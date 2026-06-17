@@ -72,9 +72,11 @@ export default function Topological() {
     try {
       const res = await runTopological(nodes.map(n => n.id), edges);
       setResult(res);
+      setStepIndex(-1);
       if (res.cyclesDetected) setError(res.errorMessage);
+      else setIsPlaying(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Backend connection failed. Ensure Ada server is running on :8080.');
+      setError(e instanceof Error ? e.message : 'Ada backend is not running. Start it with: .\\backend\\bin\\backend.exe (port 8080)');
     } finally {
       setLoading(false);
     }
@@ -235,7 +237,10 @@ export default function Topological() {
                   <Pause size={13} /> Pause
                 </button>
               ) : (
-                <button onClick={() => { if (!result) runSort(); else setIsPlaying(true); }}
+                <button onClick={() => {
+                    if (!result) { runSort(); }
+                    else { setStepIndex(-1); setIsPlaying(true); }
+                  }}
                   disabled={loading} className="btn-primary flex items-center gap-1 text-xs flex-1 justify-center disabled:opacity-50">
                   {loading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
                   {loading ? 'Running…' : result ? 'Play' : 'Run'}

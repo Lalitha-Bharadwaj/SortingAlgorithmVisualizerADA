@@ -8,10 +8,12 @@ package body Bubble_Sort is
       Arr         : Element_Vectors.Vector := Input_Arr;
       N           : constant Natural := Natural (Arr.Length);
       Step_Count  : Integer := 0;
+      Max_Steps   : constant Integer := 2000;
 
       procedure Add_Step (Action : Action_Kind; I, J : Integer) is
          Step : Trace_Step;
       begin
+         if Step_Count >= Max_Steps then return; end if;
          Step_Count := Step_Count + 1;
          Step.Step_Num := Step_Count;
          Step.Action := Action;

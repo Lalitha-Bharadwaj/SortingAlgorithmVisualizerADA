@@ -2,11 +2,16 @@ import type { SortResult, TopoResult, DatasetType } from '../types';
 import { API_BASE } from '../constants';
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('Ada backend is not running. Start it with: .\\backend\\bin\\backend.exe (port 8080)');
+  }
   if (!response.ok) {
     throw new Error(`API error ${response.status}: ${response.statusText}`);
   }
@@ -72,7 +77,12 @@ export async function runBenchmark(
   const results = await Promise.allSettled(
     algos.map(algo => runSort(algo, array))
   );
-  return results
+  const succeeded = results
     .filter((r): r is PromiseFulfilledResult<SortResult> => r.status === 'fulfilled')
     .map(r => r.value);
+  if (succeeded.length === 0) {
+    const firstErr = results.find(r => r.status === 'rejected') as PromiseRejectedResult | undefined;
+    throw firstErr?.reason ?? new Error('All benchmark requests failed.');
+  }
+  return succeeded;
 }
