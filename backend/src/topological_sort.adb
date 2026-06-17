@@ -12,6 +12,7 @@ package body Topological_Sort is
       Start_Time  : constant Time := Clock;
       Result      : Topo_Result;
       Step_Count  : Integer := 0;
+      Max_Steps   : constant Integer := 2000;
       Ops         : Integer := 0;
 
       -- Current state variables
@@ -23,6 +24,7 @@ package body Topological_Sort is
       procedure Add_Step (Action : String; Current : Unbounded_String; Active : Edge_Type) is
          Step : Graph_Step;
       begin
+         if Step_Count >= Max_Steps then return; end if;
          Step_Count := Step_Count + 1;
          Step.Step_Num := Step_Count;
          Step.Action := To_Unbounded_String (Action);
@@ -143,6 +145,69 @@ package body Topological_Sort is
       return Result;
    end Run_Topo_Sort;
 
+   procedure Append_Graph_Step_Json (Output : in out Unbounded_String; Step : Graph_Step; First : in out Boolean) is
+   begin
+      if not First then
+         Append (Output, ",");
+      end if;
+
+      Append (Output, "{""step"":" & Trim (Integer'Image (Step.Step_Num)) & ",");
+      Append (Output, """action"":""" & To_String (Step.Action) & """,");
+      Append (Output, """currentNode"":""" & To_String (Step.Current_Node) & """,");
+      
+      Append (Output, """activeEdge"":{");
+      Append (Output, """from"":""" & To_String (Step.Active_Edge.From_Node) & """,");
+      Append (Output, """to"":""" & To_String (Step.Active_Edge.To_Node) & """},");
+
+      -- Queue array
+      Append (Output, """queue"":[");
+      declare
+         Q_First : Boolean := True;
+      begin
+         for Node of Step.Queue loop
+            if not Q_First then
+               Append (Output, ",");
+            end if;
+            Append (Output, """" & To_String (Node) & """");
+            Q_First := False;
+         end loop;
+      end;
+      Append (Output, "],");
+
+      -- Processed array
+      Append (Output, """processed"":[");
+      declare
+         P_First : Boolean := True;
+      begin
+         for Node of Step.Processed loop
+            if not P_First then
+               Append (Output, ",");
+            end if;
+            Append (Output, """" & To_String (Node) & """");
+            P_First := False;
+         end loop;
+      end;
+      Append (Output, "],");
+
+      -- Indegrees object
+      Append (Output, """indegrees"":{");
+      declare
+         Ind_First : Boolean := True;
+      begin
+         for K in 1 .. Integer (Step.Node_Names.Length) loop
+            if not Ind_First then
+               Append (Output, ",");
+            end if;
+            Append (Output, """" & To_String (Step.Node_Names.Element (K)) & """:" & Trim (Integer'Image (Step.Indegrees.Element (K))));
+            Ind_First := False;
+         end loop;
+      end;
+      Append (Output, "}");
+
+      Append (Output, "}");
+      First := False;
+   end Append_Graph_Step_Json;
+
    function To_Json (Result : Topo_Result) return Unbounded_String is
       Output : Unbounded_String;
       First : Boolean;
@@ -156,65 +221,7 @@ package body Topological_Sort is
 
       First := True;
       for Step of Result.Trace loop
-         if not First then
-            Append (Output, ",");
-         end if;
-
-         Append (Output, "{""step"":" & Trim (Integer'Image (Step.Step_Num)) & ",");
-         Append (Output, """action"":""" & To_String (Step.Action) & """,");
-         Append (Output, """currentNode"":""" & To_String (Step.Current_Node) & """,");
-         
-         Append (Output, """activeEdge"":{");
-         Append (Output, """from"":""" & To_String (Step.Active_Edge.From_Node) & """,");
-         Append (Output, """to"":""" & To_String (Step.Active_Edge.To_Node) & """},");
-
-         -- Queue array
-         Append (Output, """queue"":[");
-         declare
-            Q_First : Boolean := True;
-         begin
-            for Node of Step.Queue loop
-               if not Q_First then
-                  Append (Output, ",");
-               end if;
-               Append (Output, """" & To_String (Node) & """");
-               Q_First := False;
-            end loop;
-         end;
-         Append (Output, "],");
-
-         -- Processed array
-         Append (Output, """processed"":[");
-         declare
-            P_First : Boolean := True;
-         begin
-            for Node of Step.Processed loop
-               if not P_First then
-                  Append (Output, ",");
-               end if;
-               Append (Output, """" & To_String (Node) & """");
-               P_First := False;
-            end loop;
-         end;
-         Append (Output, "],");
-
-         -- Indegrees object
-         Append (Output, """indegrees"":{");
-         declare
-            Ind_First : Boolean := True;
-         begin
-            for K in 1 .. Integer (Step.Node_Names.Length) loop
-               if not Ind_First then
-                  Append (Output, ",");
-               end if;
-               Append (Output, """" & To_String (Step.Node_Names.Element (K)) & """:" & Trim (Integer'Image (Step.Indegrees.Element (K))));
-               Ind_First := False;
-            end loop;
-         end;
-         Append (Output, "}");
-
-         Append (Output, "}");
-         First := False;
+         Append_Graph_Step_Json (Output, Step, First);
       end loop;
 
       Append (Output, "]}");

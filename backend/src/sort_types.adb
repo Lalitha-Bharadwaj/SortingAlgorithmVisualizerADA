@@ -21,10 +21,18 @@ package body Sort_Types is
       return Ada.Strings.Fixed.Trim (S, Ada.Strings.Both);
    end Trim;
 
+   procedure Append_Val (Result : in out Unbounded_String; Val : Integer; First : in out Boolean) is
+      Val_Str : constant String := Trim (Integer'Image (Val));
+   begin
+      if not First then
+         Append (Result, ",");
+      end if;
+      Append (Result, Val_Str);
+      First := False;
+   end Append_Val;
+
    function To_Json (Step : Trace_Step) return Unbounded_String is
       Result : Unbounded_String;
-      Indices_Str : Unbounded_String;
-      Arr_Str : Unbounded_String;
       First : Boolean;
    begin
       Result := To_Unbounded_String ("{""step"":");
@@ -35,11 +43,7 @@ package body Sort_Types is
       Append (Result, """indices"":[");
       First := True;
       for Idx of Step.Indices loop
-         if not First then
-            Append (Result, ",");
-         end if;
-         Append (Result, Trim (Integer'Image (Idx)));
-         First := False;
+         Append_Val (Result, Idx, First);
       end loop;
       Append (Result, "],");
 
@@ -47,16 +51,22 @@ package body Sort_Types is
       Append (Result, """array"":[");
       First := True;
       for Val of Step.Arr loop
-         if not First then
-            Append (Result, ",");
-         end if;
-         Append (Result, Trim (Integer'Image (Val)));
-         First := False;
+         Append_Val (Result, Val, First);
       end loop;
       Append (Result, "]}");
 
       return Result;
    end To_Json;
+
+   procedure Append_Step_Json (Output : in out Unbounded_String; Step : Trace_Step; First : in out Boolean) is
+      Step_Json : constant Unbounded_String := To_Json (Step);
+   begin
+      if not First then
+         Append (Output, ",");
+      end if;
+      Append (Output, Step_Json);
+      First := False;
+   end Append_Step_Json;
 
    function To_Json (Result : Sort_Result; Algo_Name : String) return Unbounded_String is
       Output : Unbounded_String;
@@ -73,11 +83,7 @@ package body Sort_Types is
 
       First := True;
       for Step of Result.Trace loop
-         if not First then
-            Append (Output, ",");
-         end if;
-         Append (Output, To_Json (Step));
-         First := False;
+         Append_Step_Json (Output, Step, First);
       end loop;
       Append (Output, "]}");
 

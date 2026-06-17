@@ -25,6 +25,23 @@ package body API_Server is
       return Ada.Strings.Fixed.Trim (S, Ada.Strings.Both);
    end Trim;
 
+   procedure Write_Unbounded_String (Channel : Stream_Access; U : Unbounded_String) is
+      Len : constant Natural := Length (U);
+      Chunk_Size : constant Positive := 8192;
+      First_Idx : Positive := 1;
+      Last_Idx : Natural;
+   begin
+      while First_Idx <= Len loop
+         Last_Idx := Integer'Min (First_Idx + Chunk_Size - 1, Len);
+         declare
+            Chunk : constant String := Slice (U, First_Idx, Last_Idx);
+         begin
+            String'Write (Channel, Chunk);
+         end;
+         First_Idx := Last_Idx + 1;
+      end loop;
+   end Write_Unbounded_String;
+
    -- Custom lightweight JSON parser for arrays
    function Parse_Array (JSON : String) return Element_Vectors.Vector is
       Result : Element_Vectors.Vector;
@@ -332,21 +349,23 @@ package body API_Server is
          Method_Str : constant String := To_String (Method);
          Path_Str   : constant String := To_String (Path);
          Req_Body   : constant String := To_String (Body_Str);
-         Response   : Unbounded_String;
          JSON_Res   : Unbounded_String;
       begin
          Log (Method_Str & " " & Path_Str & " [Body Length: " & Integer'Image (Content_Length) & "]");
 
          -- 3. CORS Preflight
          if Method_Str = "OPTIONS" then
-            Response := To_Unbounded_String ("HTTP/1.1 204 No Content" & ASCII.CR & ASCII.LF &
-               "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
-               "Access-Control-Allow-Methods: POST, GET, OPTIONS" & ASCII.CR & ASCII.LF &
-               "Access-Control-Allow-Headers: Content-Type, Authorization" & ASCII.CR & ASCII.LF &
-               "Access-Control-Max-Age: 86400" & ASCII.CR & ASCII.LF &
-               "Content-Length: 0" & ASCII.CR & ASCII.LF &
-               "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF);
-            String'Write (Channel, To_String (Response));
+            declare
+               Headers : constant String := "HTTP/1.1 204 No Content" & ASCII.CR & ASCII.LF &
+                  "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+                  "Access-Control-Allow-Methods: POST, GET, OPTIONS" & ASCII.CR & ASCII.LF &
+                  "Access-Control-Allow-Headers: Content-Type, Authorization" & ASCII.CR & ASCII.LF &
+                  "Access-Control-Max-Age: 86400" & ASCII.CR & ASCII.LF &
+                  "Content-Length: 0" & ASCII.CR & ASCII.LF &
+                  "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF;
+            begin
+               String'Write (Channel, Headers);
+            end;
             return;
          end if;
 
@@ -379,12 +398,16 @@ package body API_Server is
                   exception
                      when Storage_Error =>
                         JSON_Res := To_Unbounded_String ("{""error"":""Array too large: reduce size and try again""}");
-                        Response := To_Unbounded_String ("HTTP/1.1 500 Internal Server Error" & ASCII.CR & ASCII.LF &
-                           "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
-                           "Content-Type: application/json" & ASCII.CR & ASCII.LF &
-                           "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
-                           "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF & To_String (JSON_Res));
-                        String'Write (Channel, To_String (Response));
+                        declare
+                           Headers : constant String := "HTTP/1.1 500 Internal Server Error" & ASCII.CR & ASCII.LF &
+                              "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+                              "Content-Type: application/json" & ASCII.CR & ASCII.LF &
+                              "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
+                              "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF;
+                        begin
+                           String'Write (Channel, Headers);
+                        end;
+                        Write_Unbounded_String (Channel, JSON_Res);
                         return;
                   end;
                end;
@@ -394,39 +417,67 @@ package body API_Server is
                   Nodes : Topological_Sort.String_Vectors.Vector;
                   Edges : Topological_Sort.Edge_Vectors.Vector;
                begin
-                  Parse_Graph (Req_Body, Nodes, Edges);
-                  JSON_Res := Topological_Sort.To_Json (Topological_Sort.Run_Topo_Sort (Nodes, Edges));
+                  begin
+                     Parse_Graph (Req_Body, Nodes, Edges);
+                     JSON_Res := Topological_Sort.To_Json (Topological_Sort.Run_Topo_Sort (Nodes, Edges));
+                  exception
+                     when Storage_Error =>
+                        JSON_Res := To_Unbounded_String ("{""error"":""Graph too large: reduce size and try again""}");
+                        declare
+                           Headers : constant String := "HTTP/1.1 500 Internal Server Error" & ASCII.CR & ASCII.LF &
+                              "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+                              "Content-Type: application/json" & ASCII.CR & ASCII.LF &
+                              "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
+                              "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF;
+                        begin
+                           String'Write (Channel, Headers);
+                        end;
+                        Write_Unbounded_String (Channel, JSON_Res);
+                        return;
+                  end;
                end;
             else
                -- 404 Route
                JSON_Res := To_Unbounded_String ("{""error"":""Endpoint not found""}");
-               Response := To_Unbounded_String ("HTTP/1.1 404 Not Found" & ASCII.CR & ASCII.LF &
-                  "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
-                  "Content-Type: application/json" & ASCII.CR & ASCII.LF &
-                  "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
-                  "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF & To_String (JSON_Res));
-               String'Write (Channel, To_String (Response));
+               declare
+                  Headers : constant String := "HTTP/1.1 404 Not Found" & ASCII.CR & ASCII.LF &
+                     "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+                     "Content-Type: application/json" & ASCII.CR & ASCII.LF &
+                     "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
+                     "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF;
+               begin
+                  String'Write (Channel, Headers);
+               end;
+               Write_Unbounded_String (Channel, JSON_Res);
                return;
             end if;
 
             -- Send 200 OK Response
-            Response := To_Unbounded_String ("HTTP/1.1 200 OK" & ASCII.CR & ASCII.LF &
-               "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
-               "Content-Type: application/json" & ASCII.CR & ASCII.LF &
-               "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
-               "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF & To_String (JSON_Res));
-            String'Write (Channel, To_String (Response));
+            declare
+               Headers : constant String := "HTTP/1.1 200 OK" & ASCII.CR & ASCII.LF &
+                  "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+                  "Content-Type: application/json" & ASCII.CR & ASCII.LF &
+                  "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
+                  "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF;
+            begin
+               String'Write (Channel, Headers);
+            end;
+            Write_Unbounded_String (Channel, JSON_Res);
             return;
          end if;
 
          -- Standard GET Check
          JSON_Res := To_Unbounded_String ("{""status"":""ok"",""message"":""AdaSortLab backend is running!""}");
-         Response := To_Unbounded_String ("HTTP/1.1 200 OK" & ASCII.CR & ASCII.LF &
-            "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
-            "Content-Type: application/json" & ASCII.CR & ASCII.LF &
-            "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
-            "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF & To_String (JSON_Res));
-         String'Write (Channel, To_String (Response));
+         declare
+            Headers : constant String := "HTTP/1.1 200 OK" & ASCII.CR & ASCII.LF &
+               "Access-Control-Allow-Origin: *" & ASCII.CR & ASCII.LF &
+               "Content-Type: application/json" & ASCII.CR & ASCII.LF &
+               "Content-Length: " & Trim (Integer'Image (Length (JSON_Res))) & ASCII.CR & ASCII.LF &
+               "Connection: close" & ASCII.CR & ASCII.LF & ASCII.CR & ASCII.LF;
+         begin
+            String'Write (Channel, Headers);
+         end;
+         Write_Unbounded_String (Channel, JSON_Res);
       end;
    exception
       when E : others =>
